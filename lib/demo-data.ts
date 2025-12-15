@@ -1,5 +1,5 @@
-import { format, startOfMonth, subMonths, subYears } from 'date-fns';
-import type { ConsumptionData, CostData, LoadCurveApiResponse, LoadCurveData } from '@/types';
+import { format, startOfMonth, endOfMonth, subMonths, subYears, getDaysInMonth, eachDayOfInterval } from 'date-fns';
+import type { ConsumptionData, CostData, LoadCurveApiResponse, LoadCurveData, CalendarChartData } from '@/types';
 
 // ---------------------------------------------------------------------------
 // Monthly demo patterns (used when no API key is configured)
@@ -320,6 +320,103 @@ export function generateDemoLoadCurve(summaryLevel: SummaryLevel): LoadCurveApiR
     to,
     [key]: series,
   } as LoadCurveApiResponse;
+}
+
+// ---------------------------------------------------------------------------
+// Calendar Chart demo data (used when no API key is configured)
+// ---------------------------------------------------------------------------
+
+/**
+ * Day-of-week scaling factors for calendar demo data.
+ * Weekdays have higher consumption, weekends are lower.
+ */
+const CALENDAR_DAY_OF_WEEK_SCALE: Record<number, number> = {
+  0: 0.85, // Sunday
+  1: 1.0,  // Monday
+  2: 1.02, // Tuesday
+  3: 1.01, // Wednesday
+  4: 1.0,  // Thursday
+  5: 1.05, // Friday
+  6: 0.90, // Saturday
+};
+
+/**
+ * Generate realistic-looking hourly consumption data for a calendar month.
+ *
+ * Pattern:
+ * - Uses BASE_DAY_LOAD_SHAPE as the base 24-hour pattern
+ * - Scales by day-of-week (weekdays higher, weekends lower)
+ * - Scales by month (seasonal variation)
+ * - Adds noise for realistic variation between days
+ *
+ * @param month - Format 'YYYY-MM'
+ * @returns CalendarChartData with data, maxData, avgData, minData
+ */
+export function generateCalendarDemoData(month: string): CalendarChartData {
+  const [year, monthNum] = month.split('-').map(Number);
+  const startDate = startOfMonth(new Date(year, monthNum - 1));
+  const endDate = endOfMonth(startDate);
+  const days = eachDayOfInterval({ start: startDate, end: endDate });
+
+  const data: { [date: string]: number[] } = {};
+  const monthIndex = monthNum - 1; // 0-indexed
+  const monthScale = MONTH_SCALE[monthIndex] ?? 1;
+
+  // Generate hourly data for each day
+  days.forEach((day) => {
+    const dateKey = format(day, 'yyyy-MM-dd');
+    const dayOfWeek = day.getDay();
+    const dayScale = CALENDAR_DAY_OF_WEEK_SCALE[dayOfWeek] ?? 1;
+
+    // Generate 24 hours of data
+    const hourlyData = BASE_DAY_LOAD_SHAPE.map((baseValue, hour) => {
+      // Apply seasonal and day-of-week scaling
+      let value = baseValue * monthScale * dayScale;
+
+      // Add noise for realistic variation (±10%)
+      const noise = hashToUnit(dateKey, hour, 'calendar') * 0.2 - 0.1;
+      value = value * (1 + noise);
+
+      return Number(Math.max(0, value).toFixed(2));
+    });
+
+    data[dateKey] = hourlyData;
+  });
+
+  // Calculate max, avg, and min data across all days
+  const maxData: { [date: string]: number[] } = {};
+  const avgData: { [date: string]: number[] } = {};
+  const minData: { [date: string]: number[] } = {};
+
+  const dateKeys = Object.keys(data);
+
+  dateKeys.forEach((dateKey) => {
+    maxData[dateKey] = Array(24).fill(0);
+    avgData[dateKey] = Array(24).fill(0);
+    minData[dateKey] = Array(24).fill(0);
+
+    for (let hour = 0; hour < 24; hour++) {
+      const hourlyValues = dateKeys
+        .map((dk) => data[dk][hour])
+        .filter((val) => val > 0);
+
+      if (hourlyValues.length > 0) {
+        maxData[dateKey][hour] = Number(Math.max(...hourlyValues).toFixed(2));
+        avgData[dateKey][hour] = Number(
+          (hourlyValues.reduce((sum, val) => sum + val, 0) / hourlyValues.length).toFixed(2)
+        );
+        minData[dateKey][hour] = Number(Math.min(...hourlyValues).toFixed(2));
+      }
+    }
+  });
+
+  return {
+    data,
+    maxData,
+    avgData,
+    minData,
+    currentMonth: month,
+  };
 }
 
 

@@ -246,3 +246,33 @@ export async function getLoadCurveData({
   return apiRequest<LoadCurveApiResponse>(endpoint);
 }
 
+// ---------------------------------------------------------------------------
+// Calendar Chart (used by CalendarChart)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch hourly electricity consumption (kWh) for all sites or a specific site.
+ *
+ * VoltView endpoint:
+ *   GET /v1/sites/timeSeries
+ *   GET /v1/sites/{siteId}/timeSeries
+ * Query params:
+ *   from, to        ISO date strings (yyyy-MM-dd)
+ *   granularity     'hour'
+ *   unit            'kWh'
+ *
+ * Example URL:
+ *   /v1/sites/timeSeries?from=2025-01-01&to=2025-01-31&granularity=hour&unit=kWh
+ */
+export async function getHourlyConsumption(
+  from: string,
+  to: string,
+  siteId?: string
+): Promise<ConsumptionData[]> {
+  const basePath = siteId ? `/v1/sites/${siteId}/timeSeries` : '/v1/sites/timeSeries';
+  const response = await apiRequest<{ data: ConsumptionData[] }>(
+    `${basePath}?from=${from}&to=${to}&granularity=hour&unit=kWh`
+  );
+  return response.data;
+}
+

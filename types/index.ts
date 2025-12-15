@@ -57,3 +57,22 @@ export interface ApiError {
   message: string;
   statusCode: number;
 }
+
+// ---------------------------------------------------------------------------
+// Calendar Chart Types
+// ---------------------------------------------------------------------------
+
+// Used by CalendarChart – hourly values indexed by date string (YYYY-MM-DD)
+export interface CalendarChartData {
+  // Key: date string 'YYYY-MM-DD', Value: array of 24 hourly kWh values
+  data: { [date: string]: number[] };
+  maxData: { [date: string]: number[] };
+  avgData: { [date: string]: number[] };
+  minData: { [date: string]: number[] };
+  currentMonth: string; // Format: 'YYYY-MM'
+}
+
+// Response shape from the calendar data API route
+export interface CalendarApiResponse extends CalendarChartData {
+  demo?: boolean;
+}

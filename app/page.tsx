@@ -3,10 +3,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import MonthlyEnergyChart from '@/components/charts/MonthlyEnergyChart';
 import LoadCurveChart from '@/components/charts/LoadCurveChart';
+import CalendarChart from '@/components/charts/CalendarChart';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { CurrencySelector, Currency } from '@/components/CurrencySelector';
-import { ConsumptionData, CostData, LoadCurveApiResponse, LoadCurveData } from '@/types';
-import { generateMonthlyDemoData, generateDemoLoadCurve } from '@/lib/demo-data';
+import { ConsumptionData, CostData, LoadCurveApiResponse, LoadCurveData, CalendarChartData } from '@/types';
+import { generateMonthlyDemoData, generateDemoLoadCurve, generateCalendarDemoData } from '@/lib/demo-data';
+import { format } from 'date-fns';
 
 type SummaryLevel = LoadCurveApiResponse['summaryLevel'];
 
@@ -29,7 +31,11 @@ function getDefaultDates() {
   };
 }
 
-type Tab = 'monthly' | 'loadCurve';
+function getCurrentMonth() {
+  return format(new Date(), 'yyyy-MM');
+}
+
+type Tab = 'monthly' | 'loadCurve' | 'calendar';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>('monthly');
@@ -48,6 +54,13 @@ export default function Home() {
   const [loadCurveData, setLoadCurveData] = useState<LoadCurveData[] | null>(null);
   const [loadCurveLoading, setLoadCurveLoading] = useState(false);
   const [loadCurveUseDemo, setLoadCurveUseDemo] = useState(false);
+
+  // Calendar Chart state
+  const defaultMonth = useMemo(() => getCurrentMonth(), []);
+  const [calendarMonth, setCalendarMonth] = useState(defaultMonth);
+  const [calendarData, setCalendarData] = useState<CalendarChartData | null>(null);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarUseDemo, setCalendarUseDemo] = useState(false);
   
   const [currency, setCurrency] = useState<Currency>('GBP');
 
@@ -136,6 +149,40 @@ export default function Home() {
     fetchLoadCurve();
   }, [from, to, summaryLevel, activeTab]);
 
+  // Fetch calendar data
+  useEffect(() => {
+    if (activeTab !== 'calendar') return;
+
+    async function fetchCalendar() {
+      setCalendarLoading(true);
+      try {
+        const params = new URLSearchParams({ month: calendarMonth });
+        const response = await fetch(`/api/calendar-data?${params.toString()}`);
+        if (!response.ok) {
+          throw new Error('API not configured');
+        }
+
+        const json = await response.json();
+        setCalendarData({
+          data: json.data,
+          maxData: json.maxData,
+          avgData: json.avgData,
+          minData: json.minData,
+          currentMonth: json.currentMonth,
+        });
+        setCalendarUseDemo(Boolean(json.demo));
+      } catch {
+        const demo = generateCalendarDemoData(calendarMonth);
+        setCalendarData(demo);
+        setCalendarUseDemo(true);
+      } finally {
+        setCalendarLoading(false);
+      }
+    }
+
+    fetchCalendar();
+  }, [calendarMonth, activeTab]);
+
   return (
     <main className="min-h-screen p-8">
       <div className="max-w-6xl mx-auto">
@@ -161,7 +208,7 @@ export default function Home() {
         </div>
 
         {/* Demo Mode Banner – shown once between header and tabs */}
-        {(useDemo || loadCurveUseDemo) && (
+        {(useDemo || loadCurveUseDemo || calendarUseDemo) && (
           <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
             <p className="text-amber-800 dark:text-amber-200 text-sm">
               <strong>Demo Mode:</strong> Showing sample data. Configure your{' '}
@@ -199,6 +246,19 @@ export default function Home() {
               `}
             >
               Load Curve
+            </button>
+            <button
+              onClick={() => setActiveTab('calendar')}
+              className={`
+                py-4 px-1 border-b-2 font-medium text-sm transition-colors
+                ${
+                  activeTab === 'calendar'
+                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                }
+              `}
+            >
+              Calendar
             </button>
           </nav>
         </div>
@@ -297,6 +357,30 @@ export default function Home() {
               )}
             </div>
           </>
+        )}
+
+        {/* Calendar Chart Tab */}
+        {activeTab === 'calendar' && (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+            {calendarLoading ? (
+              <div className="flex items-center justify-center h-[400px]">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+              </div>
+            ) : calendarData ? (
+              <CalendarChart
+                data={calendarData.data}
+                maxData={calendarData.maxData}
+                avgData={calendarData.avgData}
+                minData={calendarData.minData}
+                currentMonth={calendarData.currentMonth}
+                onMonthChange={setCalendarMonth}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-[400px] text-gray-500 dark:text-gray-400">
+                No calendar data available
+              </div>
+            )}
+          </div>
         )}
 
         <footer className="mt-12 text-center text-sm text-gray-500 dark:text-gray-400">
