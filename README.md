@@ -2,7 +2,6 @@
 
 A starter kit for building energy consumption charts using the [VoltView API](https://docs.voltview.co.uk/api-reference/introduction) and [Highcharts](https://www.highcharts.com/).
 
-![Monthly Energy Chart](https://voltview.co.uk/og-image.png)
 
 ![Calendar Chart](./public/calendar-chart.png)
 
