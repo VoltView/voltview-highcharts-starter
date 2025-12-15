@@ -1,40 +1,62 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { format, subMonths, startOfMonth } from 'date-fns';
 import MonthlyEnergyChart from '@/components/charts/MonthlyEnergyChart';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { ConsumptionData, CostData } from '@/types';
 
-// Demo data for when API is not configured
-const DEMO_CONSUMPTION_DATA: ConsumptionData[] = [
-  { timestamp: '2024-01-01', electricity: 45000, gas: 28000, measurementTypeElectricity: 'actual', measurementTypeGas: 'actual' },
-  { timestamp: '2024-02-01', electricity: 42000, gas: 25000, measurementTypeElectricity: 'actual', measurementTypeGas: 'actual' },
-  { timestamp: '2024-03-01', electricity: 38000, gas: 18000, measurementTypeElectricity: 'actual', measurementTypeGas: 'actual' },
-  { timestamp: '2024-04-01', electricity: 35000, gas: 12000, measurementTypeElectricity: 'actual', measurementTypeGas: 'actual' },
-  { timestamp: '2024-05-01', electricity: 32000, gas: 8000, measurementTypeElectricity: 'actual', measurementTypeGas: 'actual' },
-  { timestamp: '2024-06-01', electricity: 38000, gas: 5000, measurementTypeElectricity: 'actual', measurementTypeGas: 'actual' },
-  { timestamp: '2024-07-01', electricity: 42000, gas: 4000, measurementTypeElectricity: 'actual', measurementTypeGas: 'actual' },
-  { timestamp: '2024-08-01', electricity: 44000, gas: 4500, measurementTypeElectricity: 'actual', measurementTypeGas: 'actual' },
-  { timestamp: '2024-09-01', electricity: 40000, gas: 8000, measurementTypeElectricity: 'actual', measurementTypeGas: 'actual' },
-  { timestamp: '2024-10-01', electricity: 38000, gas: 15000, measurementTypeElectricity: 'actual', measurementTypeGas: 'actual' },
-  { timestamp: '2024-11-01', electricity: 43000, gas: 22000, measurementTypeElectricity: 'actual', measurementTypeGas: 'actual' },
-  { timestamp: '2024-12-01', electricity: 48000, gas: 30000, measurementTypeElectricity: 'actual', measurementTypeGas: 'actual' },
-];
+// Seasonal patterns for energy consumption (indexed by month 0-11)
+// Higher gas in winter months, higher electricity in summer (AC usage)
+const SEASONAL_PATTERNS = {
+  // Month: [electricity, gas, elecCost, gasCost]
+  0:  { electricity: 45000, gas: 28000, elecCost: 6750, gasCost: 2800 },  // January
+  1:  { electricity: 42000, gas: 25000, elecCost: 6300, gasCost: 2500 },  // February
+  2:  { electricity: 38000, gas: 18000, elecCost: 5700, gasCost: 1800 },  // March
+  3:  { electricity: 35000, gas: 12000, elecCost: 5250, gasCost: 1200 },  // April
+  4:  { electricity: 32000, gas: 8000,  elecCost: 4800, gasCost: 800 },   // May
+  5:  { electricity: 38000, gas: 5000,  elecCost: 5700, gasCost: 500 },   // June
+  6:  { electricity: 42000, gas: 4000,  elecCost: 6300, gasCost: 400 },   // July
+  7:  { electricity: 44000, gas: 4500,  elecCost: 6600, gasCost: 450 },   // August
+  8:  { electricity: 40000, gas: 8000,  elecCost: 6000, gasCost: 800 },   // September
+  9:  { electricity: 38000, gas: 15000, elecCost: 5700, gasCost: 1500 },  // October
+  10: { electricity: 43000, gas: 22000, elecCost: 6450, gasCost: 2200 },  // November
+  11: { electricity: 48000, gas: 30000, elecCost: 7200, gasCost: 3000 },  // December
+} as const;
 
-const DEMO_COST_DATA: CostData[] = [
-  { date: '2024-01-01', electricityCost: 6750, gasCost: 2800 },
-  { date: '2024-02-01', electricityCost: 6300, gasCost: 2500 },
-  { date: '2024-03-01', electricityCost: 5700, gasCost: 1800 },
-  { date: '2024-04-01', electricityCost: 5250, gasCost: 1200 },
-  { date: '2024-05-01', electricityCost: 4800, gasCost: 800 },
-  { date: '2024-06-01', electricityCost: 5700, gasCost: 500 },
-  { date: '2024-07-01', electricityCost: 6300, gasCost: 400 },
-  { date: '2024-08-01', electricityCost: 6600, gasCost: 450 },
-  { date: '2024-09-01', electricityCost: 6000, gasCost: 800 },
-  { date: '2024-10-01', electricityCost: 5700, gasCost: 1500 },
-  { date: '2024-11-01', electricityCost: 6450, gasCost: 2200 },
-  { date: '2024-12-01', electricityCost: 7200, gasCost: 3000 },
-];
+/**
+ * Generates 12 months of demo data going backwards from today's date
+ * Uses realistic seasonal patterns based on the actual month of year
+ */
+function generateDemoData(): { consumption: ConsumptionData[]; cost: CostData[] } {
+  const consumption: ConsumptionData[] = [];
+  const cost: CostData[] = [];
+  const today = new Date();
+
+  // Generate 12 months of data, going backwards from current month
+  for (let i = 11; i >= 0; i--) {
+    const date = startOfMonth(subMonths(today, i));
+    const monthIndex = date.getMonth() as keyof typeof SEASONAL_PATTERNS;
+    const pattern = SEASONAL_PATTERNS[monthIndex];
+    const dateStr = format(date, 'yyyy-MM-dd');
+
+    consumption.push({
+      timestamp: dateStr,
+      electricity: pattern.electricity,
+      gas: pattern.gas,
+      measurementTypeElectricity: 'actual',
+      measurementTypeGas: 'actual',
+    });
+
+    cost.push({
+      date: dateStr,
+      electricityCost: pattern.elecCost,
+      gasCost: pattern.gasCost,
+    });
+  }
+
+  return { consumption, cost };
+}
 
 export default function Home() {
   const [consumptionData, setConsumptionData] = useState<ConsumptionData[] | null>(null);
@@ -54,8 +76,9 @@ export default function Home() {
         setCostData(data.cost);
       } catch {
         // Use demo data if API is not configured
-        setConsumptionData(DEMO_CONSUMPTION_DATA);
-        setCostData(DEMO_COST_DATA);
+        const demoData = generateDemoData();
+        setConsumptionData(demoData.consumption);
+        setCostData(demoData.cost);
         setUseDemo(true);
       } finally {
         setLoading(false);
