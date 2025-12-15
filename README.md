@@ -79,12 +79,23 @@ You can get a chart running in **two copies**:
 ### B. Load Curve
 
 1. With the dev server running, visit:
-   - `/` → tab \"Load Curve\" (interactive demo with controls)
+   - `/` → tab "Load Curve" (interactive demo with controls)
    - `/examples/load-curve` → minimal example page
 2. To copy into your app:
    - Copy `components/charts/LoadCurveChart.tsx`
    - Copy the helper `getLoadCurveData` from `lib/api.ts`
    - Call it from your backend, pick the array that matches your summaryLevel (e.g. `data.daysOfWeek`), and pass it into the chart.
+
+### C. Calendar Chart (Daily Patterns)
+
+1. With the dev server running, visit:
+   - `/` → tab "Calendar" (interactive demo with top-day highlighting)
+   - `/examples/calendar` → minimal example page
+2. To copy into your app:
+   - Copy `components/charts/CalendarChart.tsx`
+   - Copy the helper `getHourlyConsumption` from `lib/api.ts`
+   - Optionally copy the `CalendarChartData` type from `types/index.ts`
+   - Call `getHourlyConsumption` on your backend for a given date range (granularity=hour, unit=kWh), transform it into `CalendarChartData`, and pass it into the chart.
 
 ## Project Structure
 
@@ -93,9 +104,11 @@ voltview-highcharts-starter/
 ├── app/
 │   ├── api/
 │   │   ├── energy-data/
-│   │   │   └── route.ts      # API route for MonthlyEnergyChart (monthly consumption + cost)
-│   │   └── load-curve/
-│   │       └── route.ts      # API route for LoadCurveChart (load curve data)
+│   │   │   └── route.ts        # API route for MonthlyEnergyChart (monthly consumption + cost)
+│   │   ├── load-curve/
+│   │   │   └── route.ts        # API route for LoadCurveChart (load curve data)
+│   │   └── calendar-data/
+│   │       └── route.ts        # API route for CalendarChart (daily patterns calendar)
 │   ├── globals.css           # Global styles
 │   ├── layout.tsx            # Root layout with theme provider
 │   └── page.tsx              # Main page with tabbed demo (Monthly + Load Curve)
@@ -104,7 +117,8 @@ voltview-highcharts-starter/
 │   │   ├── styles/
 │   │   │   └── chart-theme.ts      # Chart theming for dark/light mode
 │   │   ├── MonthlyEnergyChart.tsx  # Monthly Energy Consumption + Cost chart
-│   │   └── LoadCurveChart.tsx      # Load Curve (hourly pattern) chart
+│   │   ├── LoadCurveChart.tsx      # Load Curve (hourly pattern) chart
+│   │   └── CalendarChart.tsx       # Calendar view of daily patterns vs max/avg/min
 │   ├── ThemeProvider.tsx     # Theme context provider
 │   └── ThemeToggle.tsx       # Dark/light mode toggle
 ├── lib/
@@ -129,6 +143,7 @@ voltview-highcharts-starter/
 |-------|-----------|-------------------------------|--------------------|
 | Monthly Energy Consumption & Cost | `MonthlyEnergyChart.tsx` | `getMonthlyConsumption`, `getMonthlyCosts` | `GET /v1/sites/timeSeries`, `GET /v1/sites/cost` |
 | Load Curve (Hourly Pattern) | `LoadCurveChart.tsx` | `getLoadCurveData` | `GET /v1/sites/loadCurve`, `GET /v1/sites/{siteId}/loadCurve` |
+| Calendar Chart (Daily Patterns) | `CalendarChart.tsx` | `getHourlyConsumption` | `GET /v1/sites/timeSeries`, `GET /v1/sites/{siteId}/timeSeries` (with `granularity=hour&unit=kWh`) |
 
 ### Example: Monthly Energy Consumption & Cost
 
@@ -286,29 +301,6 @@ This starter is designed to be extended. Check out the VoltView API documentatio
 - **Load Curve Chart** - Hourly consumption patterns
 - **Time Series Chart** - Flexible time-based analysis
 - **Cost Breakdown** - Detailed cost analysis
-
-## Deployment
-
-### Vercel (Recommended)
-
-1. Push your code to GitHub
-2. Import your repository in [Vercel](https://vercel.com)
-3. Add environment variables in Vercel dashboard:
-   - `VOLTVIEW_API_URL` (optional, defaults to `https://api.voltview.co.uk`)
-   - `VOLTVIEW_API_KEY` (required for real data)
-   - `VOLTVIEW_USER_ID` (optional, if required by `/v1/requestToken`)
-   - `VOLTVIEW_USER_EMAIL` (optional, if required by `/v1/requestToken`)
-4. Deploy!
-
-The app will automatically build and deploy. Demo data will be shown if the API key is not configured.
-
-### Other Platforms
-
-This is a standard Next.js app and can be deployed to:
-- **Netlify** - Similar to Vercel, add environment variables in dashboard
-- **Railway** - Add environment variables in project settings
-- **AWS Amplify** - Configure environment variables in console
-- **Docker** - Build with `docker build -t voltview-starter .` (requires Dockerfile)
 
 ## Troubleshooting
 
