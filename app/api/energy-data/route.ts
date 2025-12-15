@@ -3,10 +3,9 @@ import { getMonthlyConsumption, getMonthlyCosts } from '@/lib/api';
 import { format, subYears } from 'date-fns';
 
 export async function GET() {
-  // Check if API credentials are configured
-  if (!process.env.VOLTVIEW_API_EMAIL || !process.env.VOLTVIEW_API_PASSWORD) {
+  if (!process.env.VOLTVIEW_API_KEY) {
     return NextResponse.json(
-      { error: 'VoltView API credentials not configured' },
+      { error: 'VoltView API key not configured' },
       { status: 503 }
     );
   }
@@ -18,7 +17,6 @@ export async function GET() {
     const from = format(oneYearAgo, 'yyyy-MM-dd');
     const to = format(now, 'yyyy-MM-dd');
 
-    // Fetch consumption and cost data in parallel
     const [consumption, cost] = await Promise.all([
       getMonthlyConsumption(from, to),
       getMonthlyCosts(from, to),

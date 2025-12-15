@@ -1,6 +1,6 @@
 # VoltView Highcharts Starter
 
-A starter kit for building beautiful energy consumption charts using the [VoltView API](https://docs.voltview.co.uk/api-reference/introduction) and [Highcharts](https://www.highcharts.com/).
+A starter kit for building energy consumption charts using the [VoltView API](https://docs.voltview.co.uk/api-reference/introduction) and [Highcharts](https://www.highcharts.com/).
 
 ![Monthly Energy Chart](https://voltview.co.uk/og-image.png)
 
@@ -8,9 +8,16 @@ A starter kit for building beautiful energy consumption charts using the [VoltVi
 
 - 📊 **Monthly Energy Consumption Chart** - Stacked column chart showing electricity and gas consumption
 - 💷 **Cost Overlay** - Line chart overlay showing monthly energy costs
+- 💰 **Multi-Currency Support** - Display costs in GBP (£) or USD ($)
 - 🌓 **Dark/Light Theme** - Full theme support with system preference detection
 - ⚡ **Interactive Legend** - Click to toggle energy types and see cost updates
-- 🎨 **Fully Customizable** - Easy to modify colors, styles, and chart options
+- 🎨 **Fully Customisable** - Easy to modify colours, styles, and chart options
+
+## Prerequisites
+
+- **Node.js** 20.x or higher (check with `node --version`)
+- **npm** 9.x or higher (comes with Node.js)
+- **VoltView API credentials** (optional - demo data works without them)
 
 ## Quick Start
 
@@ -35,15 +42,14 @@ Copy the example environment file:
 cp .env.example .env
 ```
 
-Edit `.env` with your VoltView API credentials:
+Edit `.env` with your VoltView API key:
 
 ```env
 VOLTVIEW_API_URL=https://api.voltview.co.uk
-VOLTVIEW_API_EMAIL=your-email@example.com
-VOLTVIEW_API_PASSWORD=your-password
+VOLTVIEW_API_KEY=your-api-key-here
 ```
 
-> **Note:** Don't have VoltView credentials? The app will show demo data until you configure them. Sign up at [voltview.co.uk](https://app.voltview.co.uk) to get your API access.
+> **Note:** Don't have a VoltView API key? The app will show demo data until you configure it. Sign up at [voltview.co.uk](https://app.voltview.co.uk) to get your API key.
 
 ### 4. Start the development server
 
@@ -78,9 +84,16 @@ voltview-highcharts-starter/
 └── README.md
 ```
 
-## Chart Customization
+## Chart Customisation
 
-### Colors
+### Currency
+
+The chart supports both GBP (£) and USD ($). Use the currency selector in the top-right corner to switch between currencies. The currency formatting is automatically applied to:
+- Y-axis labels
+- Tooltips
+- Data labels on the cost line
+
+### Colours
 
 Edit the series colors in `MonthlyEnergyChart.tsx`:
 
@@ -120,30 +133,50 @@ export const chartTheme = {
 
 ## VoltView API
 
-This starter uses the following VoltView API endpoints:
+This starter uses the VoltView API v1 endpoints. All API calls are made **server-side** in the Next.js API route, ensuring your API key never reaches the browser.
+
+### Authentication
+
+The starter uses API key authentication:
+- **Endpoint**: `POST /v1/requestToken`
+- **Header**: `x-api-key: <your-api-key>`
+- Returns a JWT token that is cached and reused until expiration
+
+### Data Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
-| `POST /auth/token` | Get authentication token |
-| `GET /consumption/time-series` | Fetch consumption data |
-| `GET /sites/energy-cost` | Fetch cost data |
+| `GET /v1/sites/timeSeries` | Fetch consumption data for all sites |
+| `GET /v1/sites/cost` | Fetch cost data for all sites |
+| `GET /v1/sites/{siteId}/timeSeries` | Fetch consumption data for a specific site |
+| `GET /v1/sites/{siteId}/cost` | Fetch cost data for a specific site |
 
 For full API documentation, visit [docs.voltview.co.uk](https://docs.voltview.co.uk/api-reference/introduction).
 
 ### Available API Methods
 
 ```typescript
-import { getMonthlyConsumption, getMonthlyCosts, getSiteConsumption } from '@/lib/api';
+import { 
+  getMonthlyConsumption, 
+  getMonthlyCosts, 
+  getSiteConsumption,
+  getSiteCosts 
+} from '@/lib/api';
 
 // Fetch monthly consumption for all sites
-const consumption = await getMonthlyConsumption('2024-01-01', '2024-12-31');
+const consumption = await getMonthlyConsumption('2025-01-01', '2025-12-31');
 
 // Fetch monthly costs for all sites
-const costs = await getMonthlyCosts('2024-01-01', '2024-12-31');
+const costs = await getMonthlyCosts('2025-01-01', '2025-12-31');
 
 // Fetch consumption for a specific site
-const siteData = await getSiteConsumption('site-id', '2024-01-01', '2024-12-31', 'day');
+const siteData = await getSiteConsumption('site-id', '2025-01-01', '2025-12-31', 'month');
+
+// Fetch costs for a specific site
+const siteCosts = await getSiteCosts('site-id', '2025-01-01', '2025-12-31', 'month');
 ```
+
+> **Note**: All API methods automatically handle authentication using your `VOLTVIEW_API_KEY` environment variable. The JWT token is cached and refreshed as needed.
 
 ## Adding More Charts
 
@@ -152,6 +185,57 @@ This starter is designed to be extended. Check out the VoltView API documentatio
 - **Load Curve Chart** - Hourly consumption patterns
 - **Time Series Chart** - Flexible time-based analysis
 - **Cost Breakdown** - Detailed cost analysis
+
+## Deployment
+
+### Vercel (Recommended)
+
+1. Push your code to GitHub
+2. Import your repository in [Vercel](https://vercel.com)
+3. Add environment variables in Vercel dashboard:
+   - `VOLTVIEW_API_URL` (optional, defaults to `https://api.voltview.co.uk`)
+   - `VOLTVIEW_API_KEY` (required for real data)
+   - `VOLTVIEW_USER_ID` (optional, if required by `/v1/requestToken`)
+   - `VOLTVIEW_USER_EMAIL` (optional, if required by `/v1/requestToken`)
+4. Deploy!
+
+The app will automatically build and deploy. Demo data will be shown if the API key is not configured.
+
+### Other Platforms
+
+This is a standard Next.js app and can be deployed to:
+- **Netlify** - Similar to Vercel, add environment variables in dashboard
+- **Railway** - Add environment variables in project settings
+- **AWS Amplify** - Configure environment variables in console
+- **Docker** - Build with `docker build -t voltview-starter .` (requires Dockerfile)
+
+## Troubleshooting
+
+### Chart not displaying
+
+- **Check browser console** for errors
+- **Verify API credentials** - Check `.env` file has correct values
+- **Check network tab** - Ensure API calls are succeeding (or falling back to demo data)
+
+### "API not configured" error
+
+This is expected if you haven't set up VoltView credentials. The app will automatically show demo data. To use real data:
+1. Sign up at [app.voltview.co.uk](https://app.voltview.co.uk)
+2. Get your API credentials
+3. Add them to `.env` file
+4. Restart the dev server
+
+### Build errors
+
+- **Node version mismatch** - Ensure you're using Node.js 20.x. Use `nvm use` if you have `.nvmrc`
+- **TypeScript errors** - Run `npm run lint` to see detailed errors
+- **Missing dependencies** - Delete `node_modules` and `package-lock.json`, then run `npm install`
+
+### Chart looks broken in production
+
+- **Check Highcharts license** - Ensure you have a valid Highcharts license for production use
+- **Verify environment variables** - They must be set in your deployment platform
+- **Check browser compatibility** - Highcharts requires modern browsers (Chrome, Firefox, Safari, Edge)
 
 ## Tech Stack
 

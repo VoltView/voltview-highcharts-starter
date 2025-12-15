@@ -2,7 +2,11 @@
   "name": "voltview-highcharts-starter",
   "version": "1.0.0",
   "description": "Starter kit for building energy consumption charts with VoltView API and Highcharts",
-  "private": true,
+  "private": false,
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=9.0.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

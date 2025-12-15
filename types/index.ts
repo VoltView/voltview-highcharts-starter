@@ -10,8 +10,8 @@ export interface ConsumptionData {
 
 export interface CostData {
   date: string;
-  electricityCost: number;
-  gasCost: number;
+  electricity: number;
+  gas: number;
 }
 
 export interface TimeSeriesData {
@@ -27,8 +27,9 @@ export interface LoadCurveData {
 }
 
 export interface AuthResponse {
+  id: string;
+  email: string;
   token: string;
-  expiresAt: string;
 }
 
 export interface ApiError {

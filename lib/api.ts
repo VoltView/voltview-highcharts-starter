@@ -5,31 +5,47 @@ const API_URL = process.env.VOLTVIEW_API_URL || 'https://api.voltview.co.uk';
 let cachedToken: string | null = null;
 let tokenExpiry: Date | null = null;
 
-/**
- * Authenticate with the VoltView API and get a JWT token.
- * Tokens are cached and reused until they expire.
- */
+function decodeJWT(token: string): { exp?: number } {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      Buffer.from(base64, 'base64')
+        .toString()
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return {};
+  }
+}
+
 export async function getAuthToken(): Promise<string> {
-  // Return cached token if still valid
   if (cachedToken && tokenExpiry && new Date() < tokenExpiry) {
     return cachedToken;
   }
 
-  const email = process.env.VOLTVIEW_API_EMAIL;
-  const password = process.env.VOLTVIEW_API_PASSWORD;
+  const apiKey = process.env.VOLTVIEW_API_KEY;
+  const userId = process.env.VOLTVIEW_USER_ID;
+  const userEmail = process.env.VOLTVIEW_USER_EMAIL;
 
-  if (!email || !password) {
-    throw new Error(
-      'Missing VOLTVIEW_API_EMAIL or VOLTVIEW_API_PASSWORD environment variables'
-    );
+  if (!apiKey) {
+    throw new Error('Missing VOLTVIEW_API_KEY environment variable');
   }
 
-  const response = await fetch(`${API_URL}/auth/token`, {
+  const body: { id?: string; email?: string } = {};
+  if (userId) body.id = userId;
+  if (userEmail) body.email = userEmail;
+
+  const response = await fetch(`${API_URL}/v1/requestToken`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'x-api-key': apiKey,
     },
-    body: JSON.stringify({ email, password }),
+    body: Object.keys(body).length > 0 ? JSON.stringify(body) : undefined,
   });
 
   if (!response.ok) {
@@ -38,14 +54,17 @@ export async function getAuthToken(): Promise<string> {
 
   const data: AuthResponse = await response.json();
   cachedToken = data.token;
-  tokenExpiry = new Date(data.expiresAt);
+
+  const decoded = decodeJWT(data.token);
+  if (decoded.exp) {
+    tokenExpiry = new Date(decoded.exp * 1000);
+  } else {
+    tokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
+  }
 
   return cachedToken;
 }
 
-/**
- * Make an authenticated request to the VoltView API
- */
 async function apiRequest<T>(endpoint: string): Promise<T> {
   const token = await getAuthToken();
 
@@ -63,43 +82,26 @@ async function apiRequest<T>(endpoint: string): Promise<T> {
   return response.json();
 }
 
-/**
- * Fetch monthly energy consumption data for all sites
- * @param from - Start date (YYYY-MM-DD)
- * @param to - End date (YYYY-MM-DD)
- */
 export async function getMonthlyConsumption(
   from: string,
   to: string
 ): Promise<ConsumptionData[]> {
   const response = await apiRequest<{ data: ConsumptionData[] }>(
-    `/consumption/time-series?from=${from}&to=${to}&granularity=month`
+    `/v1/sites/timeSeries?from=${from}&to=${to}&granularity=month&unit=kWh`
   );
   return response.data;
 }
 
-/**
- * Fetch energy cost data for all sites
- * @param from - Start date (YYYY-MM-DD)
- * @param to - End date (YYYY-MM-DD)
- */
 export async function getMonthlyCosts(
   from: string,
   to: string
 ): Promise<CostData[]> {
   const response = await apiRequest<{ data: CostData[] }>(
-    `/sites/energy-cost?from=${from}&to=${to}&granularity=month`
+    `/v1/sites/cost?from=${from}&to=${to}&granularity=month`
   );
   return response.data;
 }
 
-/**
- * Fetch consumption data for a specific site
- * @param siteId - The site ID
- * @param from - Start date (YYYY-MM-DD)
- * @param to - End date (YYYY-MM-DD)
- * @param granularity - Data granularity (hour, day, week, month)
- */
 export async function getSiteConsumption(
   siteId: string,
   from: string,
@@ -107,7 +109,19 @@ export async function getSiteConsumption(
   granularity: 'hour' | 'day' | 'week' | 'month' = 'month'
 ): Promise<ConsumptionData[]> {
   const response = await apiRequest<{ data: ConsumptionData[] }>(
-    `/consumption/time-series/${siteId}?from=${from}&to=${to}&granularity=${granularity}`
+    `/v1/sites/${siteId}/timeSeries?from=${from}&to=${to}&granularity=${granularity}&unit=kWh`
+  );
+  return response.data;
+}
+
+export async function getSiteCosts(
+  siteId: string,
+  from: string,
+  to: string,
+  granularity: 'hour' | 'day' | 'week' | 'month' = 'month'
+): Promise<CostData[]> {
+  const response = await apiRequest<{ data: CostData[] }>(
+    `/v1/sites/${siteId}/cost?from=${from}&to=${to}&granularity=${granularity}`
   );
   return response.data;
 }

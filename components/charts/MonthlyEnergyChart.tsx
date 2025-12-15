@@ -8,34 +8,24 @@ import { toZonedTime, format as tzFormat } from 'date-fns-tz';
 import { chartTheme, legendTheme, tooltipTheme } from '@/components/charts/styles/chart-theme';
 import { useTheme } from 'next-themes';
 import { ConsumptionData, CostData } from '@/types';
+import { Currency } from '@/components/CurrencySelector';
 
 interface MonthlyEnergyChartProps {
   consumptionData: ConsumptionData[] | null;
   costData: CostData[] | null;
+  currency?: Currency;
 }
 
-/**
- * Monthly Energy Consumption and Cost Chart
- * 
- * Displays a combination chart with:
- * - Stacked column bars for electricity and gas consumption (kWh)
- * - Line overlay for total cost (£)
- * 
- * Features:
- * - Dual Y-axes (Energy on left, Cost on right)
- * - Interactive legend that updates cost when toggling energy types
- * - Dark/light theme support
- * - Responsive design
- */
 export default function MonthlyEnergyChart({
   consumptionData,
   costData,
+  currency = 'GBP',
 }: MonthlyEnergyChartProps) {
   const [lastUpdated, setLastUpdated] = useState<string>('');
   const { resolvedTheme } = useTheme();
   const theme = (resolvedTheme || 'light') as 'light' | 'dark';
   const [minDate, setMinDate] = useState<number>(0);
-  const costDataRef = useRef<Array<{ x: number; electricityCost: number; gasCost: number }>>([]);
+  const costDataRef = useRef<Array<{ x: number; electricityCost: number; gasCost: number; y?: number }>>([]);
 
   useEffect(() => {
     const now = new Date();
@@ -46,7 +36,6 @@ export default function MonthlyEnergyChart({
     setLastUpdated(tzFormat(todayMinus3Days, 'HH:mm dd/MM/yyyy', { timeZone: 'UTC' }));
   }, []);
 
-  // Show message if no data
   if (!consumptionData || !costData || (consumptionData.length === 0 && costData.length === 0)) {
     return (
       <div className="flex items-center justify-center h-[400px] text-gray-500 dark:text-gray-400">
@@ -57,7 +46,6 @@ export default function MonthlyEnergyChart({
     );
   }
 
-  // Process consumption data
   const formattedConsumptionData = consumptionData
     .map(d => {
       const electricityValue = d.electricity !== null ? parseFloat(d.electricity as string) : null;
@@ -82,7 +70,6 @@ export default function MonthlyEnergyChart({
     })
     .filter((d): d is NonNullable<typeof d> => d !== null);
 
-  // Process cost data
   const formattedCostData = costData
     .map(d => {
       try {
@@ -96,8 +83,8 @@ export default function MonthlyEnergyChart({
           return null;
         }
 
-        const electricityCost = d.electricityCost || 0;
-        const gasCost = d.gasCost || 0;
+        const electricityCost = d.electricity || 0;
+        const gasCost = d.gas || 0;
         const totalCost = electricityCost + gasCost;
 
         return {
@@ -112,10 +99,23 @@ export default function MonthlyEnergyChart({
     })
     .filter((d): d is NonNullable<typeof d> => d !== null);
 
-  // Store cost data in ref for event handler access
   costDataRef.current = formattedCostData;
+  const getCurrencySymbol = () => currency === 'USD' ? '$' : '£';
+  const formatCurrency = (value: number): string => {
+    const symbol = getCurrencySymbol();
+    if (value >= 1000) {
+      return `${symbol}${(Math.round(value / 10) / 100).toFixed(2)}k`;
+    }
+    return `${symbol}${value.toFixed(2)}`;
+  };
+  const formatCurrencyShort = (value: number): string => {
+    const symbol = getCurrencySymbol();
+    if (value >= 1000) {
+      return `${symbol}${(Math.round(value / 10) / 100).toFixed(1)}k`;
+    }
+    return `${symbol}${value.toFixed(1)}`;
+  };
 
-  // Highcharts configuration
   const options: Options = {
     chart: {
       type: 'column',
@@ -123,8 +123,7 @@ export default function MonthlyEnergyChart({
       backgroundColor: 'transparent',
       events: {
         load: function () {
-          // Store cost data on chart for legend click handler
-          (this as any).costData = formattedCostData;
+          (this as Highcharts.Chart & { costData?: typeof formattedCostData }).costData = formattedCostData;
         }
       }
     },
@@ -177,7 +176,7 @@ export default function MonthlyEnergyChart({
         min: 0,
         opposite: true,
         title: {
-          text: 'Cost (£)',
+          text: `Cost (${getCurrencySymbol()})`,
           style: {
             color: chartTheme[theme]?.color,
           },
@@ -212,9 +211,7 @@ export default function MonthlyEnergyChart({
             if (point.y != null) {
               const value = point.y;
               const formattedValue = point.series.name === 'Cost' 
-                ? value >= 1000 
-                  ? `£${(Math.round(value / 10) / 100).toFixed(2)}k`
-                  : `£${value.toFixed(2)}`
+                ? formatCurrency(value)
                 : `${value.toFixed(2)} kWh`;
               s += `${point.series.name}: ${formattedValue}<br/>`;
             }
@@ -253,12 +250,10 @@ export default function MonthlyEnergyChart({
             const chart = series.chart;
             const seriesName = series.name;
             
-            // Only update cost when toggling Electricity or Gas
             if (seriesName !== 'Electricity' && seriesName !== 'Gas') {
               return;
             }
 
-            // Wait for default toggle, then update cost
             setTimeout(() => {
               const electricitySeries = chart.series.find(s => s.name === 'Electricity');
               const gasSeries = chart.series.find(s => s.name === 'Gas');
@@ -269,11 +264,11 @@ export default function MonthlyEnergyChart({
               const isElecVisible = electricitySeries.visible;
               const isGasVisible = gasSeries.visible;
 
-              const costData = (chart as any).costData || costDataRef.current;
+              const costData = (chart as Highcharts.Chart & { costData?: typeof costDataRef.current }).costData || costDataRef.current;
               
               if (!costData || costData.length === 0) return;
 
-              const newCostData = costData.map((point: any) => {
+              const newCostData = costData.map((point) => {
                 let newCost = 0;
                 if (isElecVisible) newCost += (point.electricityCost || 0);
                 if (isGasVisible) newCost += (point.gasCost || 0);
@@ -292,9 +287,7 @@ export default function MonthlyEnergyChart({
           enabled: true,
           formatter: function () {
             const value = this.y ?? 0;
-            return value >= 1000
-              ? `£${(Math.round(value / 10) / 100).toFixed(1)}k`
-              : `£${value.toFixed(1)}`;
+            return formatCurrencyShort(value);
           },
           style: {
             textOutline: 'none',
