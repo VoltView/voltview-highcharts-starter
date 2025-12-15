@@ -4,6 +4,8 @@ A starter kit for building energy consumption charts using the [VoltView API](ht
 
 ![Monthly Energy Chart](https://voltview.co.uk/og-image.png)
 
+![Calendar Chart](./public/calendar-chart.png)
+
 ## Features
 
 - 📊 **Monthly Energy Consumption Chart** - Stacked column chart showing electricity and gas consumption
