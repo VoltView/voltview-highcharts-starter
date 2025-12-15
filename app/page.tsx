@@ -1,29 +1,14 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { format, subMonths, startOfMonth, subYears } from 'date-fns';
 import MonthlyEnergyChart from '@/components/charts/MonthlyEnergyChart';
 import LoadCurveChart from '@/components/charts/LoadCurveChart';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { CurrencySelector, Currency } from '@/components/CurrencySelector';
 import { ConsumptionData, CostData, LoadCurveApiResponse, LoadCurveData } from '@/types';
+import { generateMonthlyDemoData, generateDemoLoadCurve } from '@/lib/demo-data';
 
 type SummaryLevel = LoadCurveApiResponse['summaryLevel'];
-
-const SEASONAL_PATTERNS = {
-  0:  { electricity: 45000, gas: 28000, elecCost: 6750, gasCost: 2800 },
-  1:  { electricity: 42000, gas: 25000, elecCost: 6300, gasCost: 2500 },
-  2:  { electricity: 38000, gas: 18000, elecCost: 5700, gasCost: 1800 },
-  3:  { electricity: 35000, gas: 12000, elecCost: 5250, gasCost: 1200 },
-  4:  { electricity: 32000, gas: 8000,  elecCost: 4800, gasCost: 800 },
-  5:  { electricity: 38000, gas: 5000,  elecCost: 5700, gasCost: 500 },
-  6:  { electricity: 42000, gas: 4000,  elecCost: 6300, gasCost: 400 },
-  7:  { electricity: 44000, gas: 4500,  elecCost: 6600, gasCost: 450 },
-  8:  { electricity: 40000, gas: 8000,  elecCost: 6000, gasCost: 800 },
-  9:  { electricity: 38000, gas: 15000, elecCost: 5700, gasCost: 1500 },
-  10: { electricity: 43000, gas: 22000, elecCost: 6450, gasCost: 2200 },
-  11: { electricity: 48000, gas: 30000, elecCost: 7200, gasCost: 3000 },
-} as const;
 
 const SUMMARY_LEVEL_LABELS: Record<SummaryLevel, string> = {
   year: 'Year',
@@ -35,85 +20,13 @@ const SUMMARY_LEVEL_LABELS: Record<SummaryLevel, string> = {
 
 function getDefaultDates() {
   const now = new Date();
-  const oneYearAgo = subYears(now, 1);
+  const oneYearAgo = new Date(now);
+  oneYearAgo.setFullYear(now.getFullYear() - 1);
 
   return {
-    from: format(oneYearAgo, 'yyyy-MM-dd'),
-    to: format(now, 'yyyy-MM-dd'),
+    from: oneYearAgo.toISOString().slice(0, 10),
+    to: now.toISOString().slice(0, 10),
   };
-}
-
-function generateDemoLoadCurve(summaryLevel: SummaryLevel): LoadCurveApiResponse {
-  const baseNames: Record<SummaryLevel, string[]> = {
-    year: ['2024'],
-    month: ['Jan', 'Feb', 'Mar', 'Apr'],
-    week: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
-    day: ['Day 1', 'Day 2', 'Day 3', 'Day 4'],
-    dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
-  };
-
-  const names = baseNames[summaryLevel];
-  const series: LoadCurveData[] = names.map((name, index) => {
-    const electricity = Array.from({ length: 24 }, (_, hour) => {
-      const base = 50 + 10 * Math.sin((Math.PI * (hour - 7)) / 12);
-      const variation = index * 5;
-      return Math.max(10, Math.round(base + variation));
-    });
-
-    return {
-      name,
-      electricity,
-      gas: [],
-    };
-  });
-
-  const { from, to } = getDefaultDates();
-  const key =
-    summaryLevel === 'year'
-      ? 'years'
-      : summaryLevel === 'month'
-      ? 'months'
-      : summaryLevel === 'week'
-      ? 'weeks'
-      : summaryLevel === 'day'
-      ? 'days'
-      : 'daysOfWeek';
-
-  return {
-    summaryLevel,
-    from,
-    to,
-    [key]: series,
-  } as LoadCurveApiResponse;
-}
-
-function generateDemoData(): { consumption: ConsumptionData[]; cost: CostData[] } {
-  const consumption: ConsumptionData[] = [];
-  const cost: CostData[] = [];
-  const today = new Date();
-
-  for (let i = 11; i >= 0; i--) {
-    const date = startOfMonth(subMonths(today, i));
-    const monthIndex = date.getMonth() as keyof typeof SEASONAL_PATTERNS;
-    const pattern = SEASONAL_PATTERNS[monthIndex];
-    const dateStr = format(date, 'yyyy-MM-dd');
-
-    consumption.push({
-      timestamp: dateStr,
-      electricity: pattern.electricity,
-      gas: pattern.gas,
-      measurementTypeElectricity: 'actual',
-      measurementTypeGas: 'actual',
-    });
-
-    cost.push({
-      date: dateStr,
-      electricity: pattern.elecCost,
-      gas: pattern.gasCost,
-    });
-  }
-
-  return { consumption, cost };
 }
 
 type Tab = 'monthly' | 'loadCurve';
@@ -149,8 +62,11 @@ export default function Home() {
         const data = await response.json();
         setConsumptionData(data.consumption);
         setCostData(data.cost);
+        if (data.demo) {
+          setUseDemo(true);
+        }
       } catch {
-        const demoData = generateDemoData();
+        const demoData = generateMonthlyDemoData();
         setConsumptionData(demoData.consumption);
         setCostData(demoData.cost);
         setUseDemo(true);
@@ -180,7 +96,7 @@ export default function Home() {
           throw new Error('API not configured');
         }
 
-        const json = (await response.json()) as LoadCurveApiResponse;
+        const json = (await response.json()) as LoadCurveApiResponse & { demo?: boolean };
 
         const key =
           json.summaryLevel === 'year'
@@ -195,7 +111,7 @@ export default function Home() {
 
         const series = (json as any)[key] as LoadCurveData[] | undefined;
         setLoadCurveData(series && Array.isArray(series) ? series : []);
-        setLoadCurveUseDemo(false);
+        setLoadCurveUseDemo(Boolean((json as any).demo));
       } catch {
         const demo = generateDemoLoadCurve(summaryLevel);
         const key =
@@ -223,7 +139,7 @@ export default function Home() {
   return (
     <main className="min-h-screen p-8">
       <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-3xl font-bold mb-2">VoltView Highcharts Starter</h1>
             <p className="text-gray-600 dark:text-gray-400">
@@ -243,6 +159,17 @@ export default function Home() {
             <ThemeToggle />
           </div>
         </div>
+
+        {/* Demo Mode Banner – shown once between header and tabs */}
+        {(useDemo || loadCurveUseDemo) && (
+          <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+            <p className="text-amber-800 dark:text-amber-200 text-sm">
+              <strong>Demo Mode:</strong> Showing sample data. Configure your{' '}
+              <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">.env</code>{' '}
+              file with VoltView API credentials to see real data.
+            </p>
+          </div>
+        )}
 
         {/* Tab Navigation */}
         <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
@@ -275,17 +202,6 @@ export default function Home() {
             </button>
           </nav>
         </div>
-
-        {/* Demo Mode Banner */}
-        {((activeTab === 'monthly' && useDemo) || (activeTab === 'loadCurve' && loadCurveUseDemo)) && (
-          <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-            <p className="text-amber-800 dark:text-amber-200 text-sm">
-              <strong>Demo Mode:</strong> Showing sample data. Configure your{' '}
-              <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">.env</code>{' '}
-              file with VoltView API credentials to see real data.
-            </p>
-          </div>
-        )}
 
         {/* Monthly Energy Chart Tab */}
         {activeTab === 'monthly' && (

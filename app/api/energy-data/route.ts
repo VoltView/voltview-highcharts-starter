@@ -11,13 +11,13 @@
 import { NextResponse } from 'next/server';
 import { getMonthlyConsumption, getMonthlyCosts } from '@/lib/api';
 import { format, subYears } from 'date-fns';
+import { generateMonthlyDemoData } from '@/lib/demo-data';
 
 export async function GET() {
   if (!process.env.VOLTVIEW_API_KEY) {
-    return NextResponse.json(
-      { error: 'VoltView API key not configured' },
-      { status: 503 }
-    );
+    // No API key configured – serve rolling-window demo data instead of an error.
+    const demo = generateMonthlyDemoData();
+    return NextResponse.json({ demo: true, consumption: demo.consumption, cost: demo.cost });
   }
 
   try {
