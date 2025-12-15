@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { format, subMonths, startOfMonth } from 'date-fns';
+import { useState, useEffect, useMemo } from 'react';
+import { format, subMonths, startOfMonth, subYears } from 'date-fns';
 import MonthlyEnergyChart from '@/components/charts/MonthlyEnergyChart';
+import LoadCurveChart from '@/components/charts/LoadCurveChart';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { CurrencySelector, Currency } from '@/components/CurrencySelector';
-import { ConsumptionData, CostData } from '@/types';
+import { ConsumptionData, CostData, LoadCurveApiResponse, LoadCurveData } from '@/types';
+
+type SummaryLevel = LoadCurveApiResponse['summaryLevel'];
 
 const SEASONAL_PATTERNS = {
   0:  { electricity: 45000, gas: 28000, elecCost: 6750, gasCost: 2800 },
@@ -21,6 +24,68 @@ const SEASONAL_PATTERNS = {
   10: { electricity: 43000, gas: 22000, elecCost: 6450, gasCost: 2200 },
   11: { electricity: 48000, gas: 30000, elecCost: 7200, gasCost: 3000 },
 } as const;
+
+const SUMMARY_LEVEL_LABELS: Record<SummaryLevel, string> = {
+  year: 'Year',
+  month: 'Month',
+  week: 'Week',
+  day: 'Day',
+  dayOfWeek: 'Day of Week',
+};
+
+function getDefaultDates() {
+  const now = new Date();
+  const oneYearAgo = subYears(now, 1);
+
+  return {
+    from: format(oneYearAgo, 'yyyy-MM-dd'),
+    to: format(now, 'yyyy-MM-dd'),
+  };
+}
+
+function generateDemoLoadCurve(summaryLevel: SummaryLevel): LoadCurveApiResponse {
+  const baseNames: Record<SummaryLevel, string[]> = {
+    year: ['2024'],
+    month: ['Jan', 'Feb', 'Mar', 'Apr'],
+    week: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
+    day: ['Day 1', 'Day 2', 'Day 3', 'Day 4'],
+    dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+  };
+
+  const names = baseNames[summaryLevel];
+  const series: LoadCurveData[] = names.map((name, index) => {
+    const electricity = Array.from({ length: 24 }, (_, hour) => {
+      const base = 50 + 10 * Math.sin((Math.PI * (hour - 7)) / 12);
+      const variation = index * 5;
+      return Math.max(10, Math.round(base + variation));
+    });
+
+    return {
+      name,
+      electricity,
+      gas: [],
+    };
+  });
+
+  const { from, to } = getDefaultDates();
+  const key =
+    summaryLevel === 'year'
+      ? 'years'
+      : summaryLevel === 'month'
+      ? 'months'
+      : summaryLevel === 'week'
+      ? 'weeks'
+      : summaryLevel === 'day'
+      ? 'days'
+      : 'daysOfWeek';
+
+  return {
+    summaryLevel,
+    from,
+    to,
+    [key]: series,
+  } as LoadCurveApiResponse;
+}
 
 function generateDemoData(): { consumption: ConsumptionData[]; cost: CostData[] } {
   const consumption: ConsumptionData[] = [];
@@ -51,13 +116,29 @@ function generateDemoData(): { consumption: ConsumptionData[]; cost: CostData[] 
   return { consumption, cost };
 }
 
+type Tab = 'monthly' | 'loadCurve';
+
 export default function Home() {
+  const [activeTab, setActiveTab] = useState<Tab>('monthly');
+  
+  // Monthly Energy Chart state
   const [consumptionData, setConsumptionData] = useState<ConsumptionData[] | null>(null);
   const [costData, setCostData] = useState<CostData[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [useDemo, setUseDemo] = useState(false);
+  
+  // Load Curve Chart state
+  const defaultDates = useMemo(() => getDefaultDates(), []);
+  const [from, setFrom] = useState(defaultDates.from);
+  const [to, setTo] = useState(defaultDates.to);
+  const [summaryLevel, setSummaryLevel] = useState<SummaryLevel>('dayOfWeek');
+  const [loadCurveData, setLoadCurveData] = useState<LoadCurveData[] | null>(null);
+  const [loadCurveLoading, setLoadCurveLoading] = useState(false);
+  const [loadCurveUseDemo, setLoadCurveUseDemo] = useState(false);
+  
   const [currency, setCurrency] = useState<Currency>('GBP');
 
+  // Fetch monthly energy data
   useEffect(() => {
     async function fetchData() {
       try {
@@ -80,6 +161,64 @@ export default function Home() {
 
     fetchData();
   }, []);
+
+  // Fetch load curve data
+  useEffect(() => {
+    if (activeTab !== 'loadCurve') return;
+
+    async function fetchLoadCurve() {
+      setLoadCurveLoading(true);
+      try {
+        const params = new URLSearchParams({
+          from,
+          to,
+          summaryLevel,
+        });
+
+        const response = await fetch(`/api/load-curve?${params.toString()}`);
+        if (!response.ok) {
+          throw new Error('API not configured');
+        }
+
+        const json = (await response.json()) as LoadCurveApiResponse;
+
+        const key =
+          json.summaryLevel === 'year'
+            ? 'years'
+            : json.summaryLevel === 'month'
+            ? 'months'
+            : json.summaryLevel === 'week'
+            ? 'weeks'
+            : json.summaryLevel === 'day'
+            ? 'days'
+            : 'daysOfWeek';
+
+        const series = (json as any)[key] as LoadCurveData[] | undefined;
+        setLoadCurveData(series && Array.isArray(series) ? series : []);
+        setLoadCurveUseDemo(false);
+      } catch {
+        const demo = generateDemoLoadCurve(summaryLevel);
+        const key =
+          demo.summaryLevel === 'year'
+            ? 'years'
+            : demo.summaryLevel === 'month'
+            ? 'months'
+            : demo.summaryLevel === 'week'
+            ? 'weeks'
+            : demo.summaryLevel === 'day'
+            ? 'days'
+            : 'daysOfWeek';
+
+        const series = (demo as any)[key] as LoadCurveData[] | undefined;
+        setLoadCurveData(series && Array.isArray(series) ? series : []);
+        setLoadCurveUseDemo(true);
+      } finally {
+        setLoadCurveLoading(false);
+      }
+    }
+
+    fetchLoadCurve();
+  }, [from, to, summaryLevel, activeTab]);
 
   return (
     <main className="min-h-screen p-8">
@@ -105,7 +244,40 @@ export default function Home() {
           </div>
         </div>
 
-        {useDemo && (
+        {/* Tab Navigation */}
+        <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
+          <nav className="flex space-x-8" aria-label="Tabs">
+            <button
+              onClick={() => setActiveTab('monthly')}
+              className={`
+                py-4 px-1 border-b-2 font-medium text-sm transition-colors
+                ${
+                  activeTab === 'monthly'
+                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                }
+              `}
+            >
+              Monthly Energy Consumption and Cost
+            </button>
+            <button
+              onClick={() => setActiveTab('loadCurve')}
+              className={`
+                py-4 px-1 border-b-2 font-medium text-sm transition-colors
+                ${
+                  activeTab === 'loadCurve'
+                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                }
+              `}
+            >
+              Load Curve
+            </button>
+          </nav>
+        </div>
+
+        {/* Demo Mode Banner */}
+        {((activeTab === 'monthly' && useDemo) || (activeTab === 'loadCurve' && loadCurveUseDemo)) && (
           <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
             <p className="text-amber-800 dark:text-amber-200 text-sm">
               <strong>Demo Mode:</strong> Showing sample data. Configure your{' '}
@@ -115,34 +287,101 @@ export default function Home() {
           </div>
         )}
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-          {loading ? (
-            <div className="flex items-center justify-center h-[400px]">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        {/* Monthly Energy Chart Tab */}
+        {activeTab === 'monthly' && (
+          <>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+              {loading ? (
+                <div className="flex items-center justify-center h-[400px]">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+                </div>
+              ) : (
+                <MonthlyEnergyChart 
+                  consumptionData={consumptionData} 
+                  costData={costData}
+                  currency={currency}
+                />
+              )}
             </div>
-          ) : (
-            <MonthlyEnergyChart 
-              consumptionData={consumptionData} 
-              costData={costData}
-              currency={currency}
-            />
-          )}
-        </div>
 
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
-            <h3 className="font-semibold text-blue-500 mb-2">⚡ Electricity and 🔥 Gas</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Track how total electricity usage changes month‑to‑month (kWh) and spot trends or step changes in demand.
-            </p>
-          </div>
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
-            <h3 className="font-semibold text-orange-500 mb-2">💷 Cost</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              See the combined energy spend in GBP by month and measure the impact of efficiency changes.
-            </p>
-          </div>
-        </div>
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
+                <h3 className="font-semibold text-blue-500 mb-2">⚡ Electricity and 🔥 Gas</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Track how total electricity usage changes month‑to‑month (kWh) and spot trends or step changes in demand.
+                </p>
+              </div>
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
+                <h3 className="font-semibold text-orange-500 mb-2">💷 Cost</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  See the combined energy spend in GBP by month and measure the impact of efficiency changes.
+                </p>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Load Curve Chart Tab */}
+        {activeTab === 'loadCurve' && (
+          <>
+            <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+              <div className="flex gap-4 flex-wrap">
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300" htmlFor="from">
+                    From
+                  </label>
+                  <input
+                    id="from"
+                    type="date"
+                    value={from}
+                    onChange={e => setFrom(e.target.value)}
+                    className="border rounded px-2 py-1 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300" htmlFor="to">
+                    To
+                  </label>
+                  <input
+                    id="to"
+                    type="date"
+                    value={to}
+                    onChange={e => setTo(e.target.value)}
+                    className="border rounded px-2 py-1 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300" htmlFor="summaryLevel">
+                  Summary Level
+                </label>
+                <select
+                  id="summaryLevel"
+                  value={summaryLevel}
+                  onChange={e => setSummaryLevel(e.target.value as SummaryLevel)}
+                  className="border rounded px-2 py-1 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100"
+                >
+                  {Object.entries(SUMMARY_LEVEL_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+              {loadCurveLoading ? (
+                <div className="flex items-center justify-center h-[400px]">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+                </div>
+              ) : (
+                <LoadCurveChart data={loadCurveData ?? []} />
+              )}
+            </div>
+          </>
+        )}
 
         <footer className="mt-12 text-center text-sm text-gray-500 dark:text-gray-400">
           <p>

@@ -59,29 +59,130 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) to see the chart.
 
+## Build your first chart (copy-paste guide)
+
+You can get a chart running in **two copies**:
+1. In this starter app (for reference)
+2. In your own app (by copying the minimal pieces)
+
+### A. Monthly Energy Consumption & Cost
+
+1. Start the dev server: `npm run dev`
+2. Visit:
+   - `/` → tab \"Monthly Energy Consumption and Cost\" (full demo)
+   - `/examples/monthly-energy` → minimal example page
+3. To copy into your app:
+   - Copy `components/charts/MonthlyEnergyChart.tsx`
+   - Copy the helpers `getMonthlyConsumption` and `getMonthlyCosts` from `lib/api.ts`
+   - Call those helpers on your backend (Node/Next.js) and pass the results into the chart.
+
+### B. Load Curve
+
+1. With the dev server running, visit:
+   - `/` → tab \"Load Curve\" (interactive demo with controls)
+   - `/examples/load-curve` → minimal example page
+2. To copy into your app:
+   - Copy `components/charts/LoadCurveChart.tsx`
+   - Copy the helper `getLoadCurveData` from `lib/api.ts`
+   - Call it from your backend, pick the array that matches your summaryLevel (e.g. `data.daysOfWeek`), and pass it into the chart.
+
 ## Project Structure
 
 ```
 voltview-highcharts-starter/
 ├── app/
 │   ├── api/
-│   │   └── energy-data/
-│   │       └── route.ts      # API route for fetching VoltView data
+│   │   ├── energy-data/
+│   │   │   └── route.ts      # API route for MonthlyEnergyChart (monthly consumption + cost)
+│   │   └── load-curve/
+│   │       └── route.ts      # API route for LoadCurveChart (load curve data)
 │   ├── globals.css           # Global styles
 │   ├── layout.tsx            # Root layout with theme provider
-│   └── page.tsx              # Main page with chart
+│   └── page.tsx              # Main page with tabbed demo (Monthly + Load Curve)
 ├── components/
 │   ├── charts/
 │   │   ├── styles/
-│   │   │   └── chart-theme.ts  # Chart theming for dark/light mode
-│   │   └── MonthlyEnergyChart.tsx  # Main chart component
+│   │   │   └── chart-theme.ts      # Chart theming for dark/light mode
+│   │   ├── MonthlyEnergyChart.tsx  # Monthly Energy Consumption + Cost chart
+│   │   └── LoadCurveChart.tsx      # Load Curve (hourly pattern) chart
 │   ├── ThemeProvider.tsx     # Theme context provider
 │   └── ThemeToggle.tsx       # Dark/light mode toggle
 ├── lib/
-│   └── api.ts                # VoltView API client
+│   └── api.ts                # VoltView API helpers (per-chart functions)
 ├── types/
 │   └── index.ts              # TypeScript type definitions
 └── README.md
+```
+
+### How this repo is organized
+
+- `app/` – Demo Next.js app (routing, layout, API routes). You **don’t need to copy this whole folder** to use a chart.
+- `components/charts/` – **Copy-pasteable chart components**. Import these into your own app.
+- `lib/api.ts` – **Minimal VoltView API helper functions**. Each chart has a small set of helpers here.
+- `types/` – Shared TypeScript types for VoltView responses used by the helpers and charts.
+
+> **Goal of this repo:** Pick a chart → copy the React component from `components/charts/` → copy the matching helper(s) from `lib/api.ts` → wire to your own backend using the VoltView endpoints.
+
+## Charts and their API calls
+
+| Chart | Component | API helpers (in `lib/api.ts`) | VoltView endpoints |
+|-------|-----------|-------------------------------|--------------------|
+| Monthly Energy Consumption & Cost | `MonthlyEnergyChart.tsx` | `getMonthlyConsumption`, `getMonthlyCosts` | `GET /v1/sites/timeSeries`, `GET /v1/sites/cost` |
+| Load Curve (Hourly Pattern) | `LoadCurveChart.tsx` | `getLoadCurveData` | `GET /v1/sites/loadCurve`, `GET /v1/sites/{siteId}/loadCurve` |
+
+### Example: Monthly Energy Consumption & Cost
+
+Minimal backend usage (Node/Next.js-style):
+
+```ts
+// lib/api.ts (copy these helpers into your own project if needed)
+import { getMonthlyConsumption, getMonthlyCosts } from './lib/api';
+
+const consumption = await getMonthlyConsumption('2025-01-01', '2025-12-31');
+const cost = await getMonthlyCosts('2025-01-01', '2025-12-31');
+```
+
+Minimal React usage:
+
+```tsx
+import MonthlyEnergyChart from './components/charts/MonthlyEnergyChart';
+
+export function MonthlyExample({ consumption, cost }) {
+  return (
+    <MonthlyEnergyChart
+      consumptionData={consumption}
+      costData={cost}
+      currency="GBP"
+    />
+  );
+}
+```
+
+### Example: Load Curve
+
+Backend usage:
+
+```ts
+import { getLoadCurveData } from './lib/api';
+
+const data = await getLoadCurveData({
+  from: '2025-01-01',
+  to: '2025-12-31',
+  summaryLevel: 'dayOfWeek', // or 'day' | 'week' | 'month' | 'year'
+});
+
+// Pick the array matching summaryLevel to pass into the chart
+const series = data.daysOfWeek ?? [];
+```
+
+React usage:
+
+```tsx
+import LoadCurveChart from './components/charts/LoadCurveChart';
+
+export function LoadCurveExample({ series }) {
+  return <LoadCurveChart data={series} />;
+}
 ```
 
 ## Chart Customisation

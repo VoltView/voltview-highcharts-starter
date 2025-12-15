@@ -1,4 +1,16 @@
-import { AuthResponse, ConsumptionData, CostData } from '@/types';
+import { AuthResponse, ConsumptionData, CostData, LoadCurveApiResponse } from '@/types';
+
+/**
+ * VoltView API client helpers
+ *
+ * This file contains small, copy-pasteable helpers for calling the VoltView API.
+ * Each chart in components/charts/ maps to a small group of functions here.
+ *
+ * Authentication:
+ * - Uses VOLTVIEW_API_KEY (and optional VOLTVIEW_USER_ID / VOLTVIEW_USER_EMAIL)
+ * - Requests a short-lived JWT via POST /v1/requestToken
+ * - Caches the token in-memory until expiry
+ */
 
 const API_URL = process.env.VOLTVIEW_API_URL || 'https://api.voltview.co.uk';
 
@@ -22,6 +34,14 @@ function decodeJWT(token: string): { exp?: number } {
   }
 }
 
+/**
+ * Low-level helper: fetches and caches a VoltView JWT using your API key.
+ *
+ * Endpoint:
+ *   POST /v1/requestToken
+ * Headers:
+ *   x-api-key: VOLTVIEW_API_KEY
+ */
 export async function getAuthToken(): Promise<string> {
   if (cachedToken && tokenExpiry && new Date() < tokenExpiry) {
     return cachedToken;
@@ -82,6 +102,25 @@ async function apiRequest<T>(endpoint: string): Promise<T> {
   return response.json();
 }
 
+type SummaryLevel = 'year' | 'month' | 'week' | 'day' | 'dayOfWeek';
+
+// ---------------------------------------------------------------------------
+// Monthly Energy Consumption and Cost (used by MonthlyEnergyChart)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch monthly electricity + gas consumption (kWh) for all sites.
+ *
+ * VoltView endpoint:
+ *   GET /v1/sites/timeSeries
+ * Query params:
+ *   from, to        ISO date strings (yyyy-MM-dd)
+ *   granularity     'month'
+ *   unit            'kWh'
+ *
+ * Example URL:
+ *   /v1/sites/timeSeries?from=2025-01-01&to=2025-12-31&granularity=month&unit=kWh
+ */
 export async function getMonthlyConsumption(
   from: string,
   to: string
@@ -92,6 +131,18 @@ export async function getMonthlyConsumption(
   return response.data;
 }
 
+/**
+ * Fetch monthly total energy cost (currency) for all sites.
+ *
+ * VoltView endpoint:
+ *   GET /v1/sites/cost
+ * Query params:
+ *   from, to        ISO date strings (yyyy-MM-dd)
+ *   granularity     'month'
+ *
+ * Example URL:
+ *   /v1/sites/cost?from=2025-01-01&to=2025-12-31&granularity=month
+ */
 export async function getMonthlyCosts(
   from: string,
   to: string
@@ -102,6 +153,16 @@ export async function getMonthlyCosts(
   return response.data;
 }
 
+/**
+ * Fetch time series consumption (kWh) for a specific site.
+ *
+ * VoltView endpoint:
+ *   GET /v1/sites/{siteId}/timeSeries
+ * Query params:
+ *   from, to        ISO date strings (yyyy-MM-dd)
+ *   granularity     'hour' | 'day' | 'week' | 'month'
+ *   unit            'kWh'
+ */
 export async function getSiteConsumption(
   siteId: string,
   from: string,
@@ -114,6 +175,15 @@ export async function getSiteConsumption(
   return response.data;
 }
 
+/**
+ * Fetch time series costs for a specific site.
+ *
+ * VoltView endpoint:
+ *   GET /v1/sites/{siteId}/cost
+ * Query params:
+ *   from, to        ISO date strings (yyyy-MM-dd)
+ *   granularity     'hour' | 'day' | 'week' | 'month'
+ */
 export async function getSiteCosts(
   siteId: string,
   from: string,
@@ -125,3 +195,54 @@ export async function getSiteCosts(
   );
   return response.data;
 }
+
+// ---------------------------------------------------------------------------
+// Load Curve (used by LoadCurveChart)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch load curve data (average kWh by hour of day) for all sites or a single site.
+ *
+ * VoltView endpoints:
+ *   GET /v1/sites/loadCurve
+ *   GET /v1/sites/{siteId}/loadCurve
+ *
+ * Required query params:
+ *   from, to        ISO date strings (yyyy-MM-dd)
+ *   summaryLevel    'year' | 'month' | 'week' | 'day' | 'dayOfWeek'
+ *
+ * Optional:
+ *   utility         'ELECTRICITY' | 'GAS'
+ *
+ * Example URL:
+ *   /v1/sites/loadCurve?from=2025-01-01&to=2025-12-31&summaryLevel=dayOfWeek
+ */
+export async function getLoadCurveData({
+  from,
+  to,
+  summaryLevel = 'dayOfWeek',
+  utility,
+  siteId,
+}: {
+  from: string;
+  to: string;
+  summaryLevel?: SummaryLevel;
+  utility?: 'ELECTRICITY' | 'GAS';
+  siteId?: string;
+}): Promise<LoadCurveApiResponse> {
+  const params = new URLSearchParams({
+    from,
+    to,
+    summaryLevel,
+  });
+
+  if (utility) {
+    params.set('utility', utility);
+  }
+
+  const basePath = siteId ? `/v1/sites/${siteId}/loadCurve` : '/v1/sites/loadCurve';
+  const endpoint = `${basePath}?${params.toString()}`;
+
+  return apiRequest<LoadCurveApiResponse>(endpoint);
+}
+

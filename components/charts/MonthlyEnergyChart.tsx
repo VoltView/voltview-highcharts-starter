@@ -1,3 +1,20 @@
+/**
+ * MonthlyEnergyChart
+ *
+ * What it shows:
+ * - Stacked column chart of monthly electricity and gas consumption (kWh)
+ * - Line chart overlay of monthly total cost (GBP/USD)
+ *
+ * VoltView API usage:
+ * - Expects data shaped like the responses from:
+ *   - getMonthlyConsumption(from, to)  → /v1/sites/timeSeries?granularity=month&unit=kWh
+ *   - getMonthlyCosts(from, to)       → /v1/sites/cost?granularity=month
+ *   defined in lib/api.ts
+ *
+ * How to use:
+ * - Call the helpers in lib/api.ts on your backend
+ * - Pass the resulting arrays into this component as consumptionData and costData
+ */
 'use client';
 
 import { useEffect, useState, useRef } from 'react';

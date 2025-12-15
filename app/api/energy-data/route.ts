@@ -1,3 +1,13 @@
+/**
+ * API route backing:
+ * - MonthlyEnergyChart (main tabbed page)
+ * - app/examples/monthly-energy/page.tsx
+ *
+ * Uses helpers from lib/api.ts:
+ * - getMonthlyConsumption
+ * - getMonthlyCosts
+ */
+
 import { NextResponse } from 'next/server';
 import { getMonthlyConsumption, getMonthlyCosts } from '@/lib/api';
 import { format, subYears } from 'date-fns';
